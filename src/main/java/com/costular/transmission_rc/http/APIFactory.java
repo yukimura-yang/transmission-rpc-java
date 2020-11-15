@@ -19,7 +19,7 @@ public class APIFactory {
                     .addConverterFactory(GsonConverterFactory.create());
 
 
-    public static <S> S createService(String url, String CSRF, Class<S> serviceClass) {
+    public static <S> S createService(String url, String CSRF, String authorization, Class<S> serviceClass) {
         HttpLoggingInterceptor logging = new HttpLoggingInterceptor();
         logging.setLevel(HttpLoggingInterceptor.Level.BODY);
         httpClient.addInterceptor(logging);
@@ -35,6 +35,19 @@ public class APIFactory {
             Request request = requestBuilder.build();
             return chain.proceed(request);
         });
+
+        if (authorization != null) {
+            httpClient.addInterceptor(chain -> {
+                Request original = chain.request();
+
+                Request.Builder requestBuilder = original.newBuilder()
+                        .header("authorization", authorization)
+                        .method(original.method(), original.body());
+
+                Request request = requestBuilder.build();
+                return chain.proceed(request);
+            });
+        }
 
         if (CSRF != null) {
             httpClient.addInterceptor(chain -> {

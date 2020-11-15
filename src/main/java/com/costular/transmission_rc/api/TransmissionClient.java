@@ -11,6 +11,7 @@ import com.costular.transmission_rc.http.command.general.SetSessionDataCommand;
 import com.costular.transmission_rc.http.command.statistics.SessionStatsBody;
 import com.costular.transmission_rc.http.command.torrent.*;
 import com.costular.transmission_rc.utils.TorrentUtils;
+import com.sun.org.apache.xerces.internal.impl.dv.util.Base64;
 import retrofit2.Response;
 
 import java.io.File;
@@ -23,21 +24,31 @@ public class TransmissionClient {
 
     /**
      * Returns a TransmissionClient instance with URL
+     *
      * @param url The URL of Transmission RPC
      * @return TransmissionClient instance
      */
     public static TransmissionClient getInstance(String url) {
         if (instance == null) {
-            instance = new TransmissionClient(url);
+            instance = new TransmissionClient(url, null, null);
+        }
+        return instance;
+    }
+
+    public static TransmissionClient getInstance(String url, String account, String password) {
+        if (instance == null) {
+            instance = new TransmissionClient(url, account, password);
         }
         return instance;
     }
 
     /**
      * Returns a TransmissionClient instance with host and port
+     *
      * @param host The transmission rpc host (eg: localhost or 192.168.1.100)
      * @param port The transmission prc port (eg: 9091)
      * @return TransmissionClient instance
+     * @deprecated
      */
     public static TransmissionClient getInstance(String host, int port) {
         return getInstance(String.format("http://%d:%s", host, port));
@@ -45,12 +56,18 @@ public class TransmissionClient {
 
     private String url;
     private String csrf;
+    private String authorization;
 
-    private TransmissionClient(String url) {
+    private TransmissionClient(String url, String account, String password) {
         if (url != null) {
             if (url.endsWith("/")) {
                 throw new IllegalArgumentException("URL must ends without a slash (/)");
             }
+        }
+        if (account != null && password != null) {
+            String content = account + ":" + password;
+            content = Base64.encode(content.getBytes());
+            authorization = "Basic " + content;
         }
 
         this.url = url;
@@ -59,7 +76,7 @@ public class TransmissionClient {
 
     private void loadCSRF() {
         try {
-            Response response = APIFactory.createService(url, null, SessionService.class)
+            Response response = APIFactory.createService(url, null, authorization, SessionService.class)
                     .getSessionStatistics(new SessionStatsBody())
                     .execute();
             csrf = response.headers().get("X-Transmission-Session-Id");
@@ -69,58 +86,61 @@ public class TransmissionClient {
     }
 
     public void checkPort(TransmissionCallback<Boolean> callback) {
-        APIFactory.createService(url, csrf, GeneralService.class)
+        APIFactory.createService(url, csrf, authorization, GeneralService.class)
                 .checkPort(new CheckPortCommand())
                 .enqueue(new APIResponse<>(callback));
     }
 
     public void getSessionData(TransmissionCallback<SessionInfo> callback) {
-        APIFactory.createService(url, csrf, GeneralService.class)
+        APIFactory.createService(url, csrf, authorization, GeneralService.class)
                 .getSessionInfo(new GetSessionDataCommand())
                 .enqueue(new APIResponse<>(callback));
     }
 
     public void changeSessionData(SetSessionData changeData, TransmissionCallback<Boolean> callback) {
-        APIFactory.createService(url, csrf, GeneralService.class)
+        APIFactory.createService(url, csrf, authorization, GeneralService.class)
                 .setSessionInfo(new SetSessionDataCommand(changeData))
                 .enqueue(new APIResponse<>(callback));
     }
 
     /**
      * Get info of torrent
-     * @param id torrent id
+     *
+     * @param id       torrent id
      * @param callback callback result
      */
     public void getTorrentInfo(long id, TransmissionCallback<TorrentInfoCollection> callback) {
         GetTorrentCommand command = new GetTorrentCommand(new GetTorrentArguments(Ids.createId(id)));
 
-        APIFactory.createService(url, csrf, TorrentService.class)
+        APIFactory.createService(url, csrf, authorization, TorrentService.class)
                 .getTorrentInfo(command)
                 .enqueue(new APIResponse<>(callback));
     }
 
     /**
      * Get info of all torrents
+     *
      * @param callback callback result
      */
     public void getAllTorrentsInfo(TransmissionCallback<TorrentInfoCollection> callback) {
         GetTorrentCommand command = new GetTorrentCommand(new GetTorrentArguments(Ids.createAllIds()));
 
-        APIFactory.createService(url, csrf, TorrentService.class)
+        APIFactory.createService(url, csrf, authorization, TorrentService.class)
                 .getTorrentInfo(command)
                 .enqueue(new APIResponse<>(callback));
     }
 
     public void getSessionStatistics(TransmissionCallback<SessionStats> callback) {
-        APIFactory.createService(url, csrf, SessionService.class)
+        APIFactory.createService(url, csrf, authorization, SessionService.class)
                 .getSessionStatistics(new SessionStatsBody())
                 .enqueue(new APIResponse<>(callback));
     }
 
     /**
      * Add torrent
-     * @param link magnet link
-     * @param paused torrent should be paused
+     *
+     * @param link     magnet link
+     * @param paused   torrent should be paused
      * @param callback callback result
      */
     public void addTorrent(String link, boolean paused, TransmissionCallback<AddedTorrentInfo> callback) {
@@ -128,7 +148,7 @@ public class TransmissionClient {
         arguments.setFilename(link);
         arguments.setPaused(paused);
 
-        APIFactory.createService(url, csrf, TorrentService.class)
+        APIFactory.createService(url, csrf, authorization, TorrentService.class)
                 .addTorrent(new AddTorrentCommand(arguments))
                 .enqueue(new APIResponse<>(callback));
     }
@@ -140,7 +160,7 @@ public class TransmissionClient {
         arguments.setMetainfo(encodedBase64Meta);
         arguments.setPaused(paused);
 
-        APIFactory.createService(url, csrf, TorrentService.class)
+        APIFactory.createService(url, csrf, authorization, TorrentService.class)
                 .addTorrent(new AddTorrentCommand(arguments))
                 .enqueue(new APIResponse<>(callback));
     }
@@ -156,7 +176,7 @@ public class TransmissionClient {
     private void moveTorrent(Ids ids, String newPath, boolean move, TransmissionCallback<Boolean> callback) {
         MoveTorrentCommand command = new MoveTorrentCommand(new MoveTorrentArguments(ids, newPath, move));
 
-        APIFactory.createService(url, csrf, TorrentService.class)
+        APIFactory.createService(url, csrf, authorization, TorrentService.class)
                 .moveTorrent(command)
                 .enqueue(new APIResponse<>(callback));
     }
@@ -180,15 +200,16 @@ public class TransmissionClient {
     private void deleteTorrent(Ids ids, boolean deleteLocalData, TransmissionCallback<Boolean> callback) {
         RemoveTorrentArguments arguments = new RemoveTorrentArguments(ids, deleteLocalData);
 
-        APIFactory.createService(url, csrf, TorrentService.class)
+        APIFactory.createService(url, csrf, authorization, TorrentService.class)
                 .removeTorrent(new RemoveTorrentCommand(arguments))
                 .enqueue(new APIResponse<>(callback));
     }
 
     /**
      * Delete all torrents
+     *
      * @param deleteLocalData delete local data
-     * @param callback callback result
+     * @param callback        callback result
      */
     public void deleteAllTorrents(boolean deleteLocalData, TransmissionCallback<Boolean> callback) {
         deleteTorrent(Ids.createAllIds(), deleteLocalData, callback);
@@ -196,9 +217,10 @@ public class TransmissionClient {
 
     /**
      * Delete torrents by id's list
-     * @param torrentIds List of id's of the torrents
+     *
+     * @param torrentIds      List of id's of the torrents
      * @param deleteLocalData delete local data
-     * @param callback callback result
+     * @param callback        callback result
      */
     public void deleteTorrents(List<Long> torrentIds, boolean deleteLocalData, TransmissionCallback<Boolean> callback) {
         Ids ids = Ids.createIds(torrentIds);
@@ -207,9 +229,10 @@ public class TransmissionClient {
 
     /**
      * Delete single torrent by its id
-     * @param torrentId id of the torrent
+     *
+     * @param torrentId       id of the torrent
      * @param deleteLocalData delete local data
-     * @param callback callback result
+     * @param callback        callback result
      */
     public void deleteTorrent(long torrentId, boolean deleteLocalData, TransmissionCallback<Boolean> callback) {
         Ids ids = Ids.createId(torrentId);
@@ -220,13 +243,14 @@ public class TransmissionClient {
     private void torrentAction(Ids ids, TorrentAction action, TransmissionCallback<Boolean> callback) {
         TorrentActionCommand body = TorrentActionCommand.create(action, ids);
 
-        APIFactory.createService(url, csrf, TorrentService.class)
+        APIFactory.createService(url, csrf, authorization, TorrentService.class)
                 .torrentAction(body)
                 .enqueue(new APIResponse<>(callback));
     }
 
     /**
      * Do action for single torrent
+     *
      * @param torrentId
      * @param torrentAction
      * @param callback
@@ -237,6 +261,7 @@ public class TransmissionClient {
 
     /**
      * Do action for many torrents
+     *
      * @param torrents
      * @param torrentAction
      * @param callback
@@ -247,6 +272,7 @@ public class TransmissionClient {
 
     /**
      * Do action for all torrents
+     *
      * @param torrentAction
      * @param callback
      */
@@ -258,7 +284,7 @@ public class TransmissionClient {
         torrentInfo.setIds(ids);
         SetTorrentCommand setTorrentCommand = new SetTorrentCommand(torrentInfo);
 
-        APIFactory.createService(url, csrf, TorrentService.class)
+        APIFactory.createService(url, csrf, authorization, TorrentService.class)
                 .setTorrent(setTorrentCommand)
                 .enqueue(new APIResponse<>(callback));
     }
@@ -274,7 +300,7 @@ public class TransmissionClient {
     private void moveQueue(Ids ids, QueueAction queueAction, TransmissionCallback<Boolean> callback) {
         QueueMovementCommand command = QueueMovementCommand.create(queueAction, ids);
 
-        APIFactory.createService(url, csrf, TorrentService.class)
+        APIFactory.createService(url, csrf, authorization, TorrentService.class)
                 .queueMovement(command)
                 .enqueue(new APIResponse<>(callback));
     }
@@ -288,7 +314,7 @@ public class TransmissionClient {
     }
 
     public void closeSession() {
-        APIFactory.createService(url, csrf, GeneralService.class)
+        APIFactory.createService(url, csrf, authorization, GeneralService.class)
                 .closeConnection(new CloseConnectionCommand())
                 .enqueue(null);
     }

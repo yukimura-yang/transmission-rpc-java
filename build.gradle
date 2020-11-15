@@ -6,7 +6,8 @@ apply plugin: 'java'
 sourceCompatibility = 1.8
 
 repositories {
-    mavenCentral()
+    maven { url "https://maven.aliyun.com/repository/central" }
+//    mavenCentral()
 }
 
 dependencies {
@@ -14,9 +15,9 @@ dependencies {
 
     compile 'com.google.guava:guava:22.0'
     compile group: 'org.slf4j', name: 'slf4j-api', version: '1.7.25'
-    compile 'com.squareup.retrofit2:retrofit:2.3.0'
-    compile 'com.squareup.retrofit2:converter-gson:2.3.0'
-    compile 'com.squareup.okhttp3:logging-interceptor:3.8.1'
+    compile 'com.squareup.retrofit2:retrofit:2.9.0'
+    compile 'com.squareup.retrofit2:converter-gson:2.9.0'
+    compile 'com.squareup.okhttp3:logging-interceptor:4.9.0'
     testCompile "org.mockito:mockito-core:2.+"
     testCompile 'org.assertj:assertj-core:3.8.0'
 }
